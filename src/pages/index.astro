@@ -1,0 +1,79 @@
+---
+import AssetCard from '../components/AssetCard.astro';
+import { getCollection } from 'astro:content';
+
+const entries = await getCollection('assets').catch((error) => {
+  console.error('Failed to load assets:', error);
+  return [];
+});
+
+// Load all images with a static glob pattern (required by Vite)
+const imageModules = import.meta.glob<ImageMetadata>('../../assets/media/*.{jpg,jpeg,png,gif,webp}', { eager: true, import: 'default' });
+
+// Only include entries that have a valid image filename
+const cards = entries
+  .filter((entry) => entry.data?.filename && entry.data.filename[0])
+  .map((entry) => {
+    const filename = entry.data.filename?.[0];
+    const imagePath = `../../assets/media/${filename}`;
+    const imageModule = imageModules[imagePath];
+    return imageModule ? { ...entry.data, image: imageModule } : null;
+  })
+  .filter((entry) => entry !== null);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Asset Gallery</title>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Asset Gallery</h1>
+      <section class="card-grid">
+        {cards.length > 0 ? (
+          cards.map((entry) => (
+            <AssetCard
+              id={entry.id}
+              title={entry.Title}
+              image={entry.image}
+              slug={entry.slug}
+            />
+          ))
+        ) : (
+          <p>No assets available</p>
+        )}
+      </section>
+    </main>
+  </body>
+</html>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin-inline: auto;
+    padding: 2rem 1rem 4rem;
+  }
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.5rem;
+  }
+  @media (min-width: 640px) {
+    .card-grid {
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+  }
+  @media (min-width: 1024px) {
+    .card-grid {
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+  }
+</style>

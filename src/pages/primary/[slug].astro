@@ -1,0 +1,179 @@
+---
+import ideasAssets from "../../../data/ideas_project_assets.json";
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+export async function getStaticPaths() {
+  const paths = ideasAssets
+    .filter((entry) => entry.filename?.[0])
+    .map((entry) => ({
+      params: { slug: entry.slug },
+    }));
+  return paths;
+}
+
+const { slug } = Astro.params as { slug: string };
+
+const entry = ideasAssets.find((asset) => asset.slug === slug);
+
+if (!entry) {
+  return Astro.redirect('/404');
+}
+
+const filename = entry.filename?.[0] || '';
+const imagePath = `../../../assets/media/${filename}`;
+
+// Load image metadata via static glob pattern
+const imageModules = import.meta.glob<ImageMetadata>('../../../assets/media/*.{jpg,jpeg,png,gif,webp}', { eager: true, import: 'default' });
+const image = imageModules[imagePath];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{entry.Title} - Asset Detail</title>
+    <link rel="stylesheet" href="/assets/css/detail.css" />
+  </head>
+  <body>
+    <main class="asset-detail-page">
+      <header class="asset-header">
+        <h1>{entry.Title}</h1>
+        <p class="asset-id">ID: {entry.id}</p>
+      </header>
+
+<section class="asset-image-section">
+  {image ? (
+    <Image
+      src={image}
+      alt={entry.Title}
+      loading="lazy"
+      class="asset-fullimage"
+    />
+  ) : (
+    <div class="image-placeholder">
+      <p>Image not available</p>
+    </div>
+  )}
+</section>
+
+      <section class="asset-metadata">
+        <table class="metadata-table">
+          <tbody>
+            {Object.entries(entry)
+              .filter(([, value]) => value && value !== "" && value !== null)
+              .map(([key, value]) => (
+                <tr>
+                  <td data-label="Property">{key}</td>
+                  <td data-label="Value">{String(value)}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
+
+<style>
+  .asset-detail-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    font-family: system-ui, sans-serif;
+  }
+
+  .asset-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .asset-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .asset-id {
+    color: #6b7280;
+    font-size: 0.875rem;
+  }
+
+  .asset-image-section {
+    margin: 3rem 0;
+    text-align: center;
+  }
+
+  .asset-fullimage {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .asset-metadata {
+    margin-top: 3rem;
+  }
+
+  .metadata-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .metadata-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .metadata-table tr:nth-child(even) td {
+    background: #f9fafb;
+  }
+
+  .metadata-table tr:hover td {
+    background: #f3f4f6;
+  }
+
+  @media (max-width: 640px) {
+    .metadata-table,
+    .metadata-table tbody,
+    .metadata-table td,
+    .metadata-table tr {
+      display: block;
+    }
+
+    .metadata-table tr {
+      margin-bottom: 1rem;
+      background: #f9fafb;
+      border-radius: 0.375rem;
+      border: 1px solid #e5e7eb;
+      padding: 0.75rem;
+    }
+
+    .metadata-table td {
+      border-bottom: none;
+      padding: 0.25rem 0;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .metadata-table td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: #6b7280;
+      margin-right: 0.75rem;
+      flex-shrink: 0;
+    }
+  }
+  .image-placeholder {
+    margin: 3rem 0;
+    padding: 2rem;
+    background: #f9fafb;
+    border-radius: 0.5rem;
+    color: #6b7280;
+    text-align: center;
+  }
+</style>
