@@ -1,0 +1,991 @@
+---
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+interface SearchAsset {
+  id: string;
+  Title: string;
+  Description: string;
+  Creator: string;
+  Contributor: string;
+  Institution: string;
+  Country: string;
+  Region: string;
+  Subject: string;
+  Coverage: string;
+  Language: string;
+  Slug: string;
+  Image: ImageMetadata;
+}
+
+interface Props {
+  assets: SearchAsset[];
+}
+
+const { assets } = Astro.props as Props;
+
+const FACET_FIELDS = [
+  { key: 'Country', label: 'Country' },
+  { key: 'Region', label: 'Region' },
+  { key: 'Subject', label: 'Subject' },
+  { key: 'Creator', label: 'Creator' },
+  { key: 'Contributor', label: 'Contributor' },
+  { key: 'Institution', label: 'Institution' },
+  { key: 'Coverage', label: 'Coverage' },
+  { key: 'Language', label: 'Language' },
+] as const;
+
+function getFacetValues(field: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  assets.forEach((asset) => {
+    const value = asset[field as keyof SearchAsset] as string;
+    if (value && value.trim()) {
+      const trimmed = value.trim();
+      counts.set(trimmed, (counts.get(trimmed) || 0) + 1);
+    }
+  });
+  return counts;
+}
+
+function getTopFacetValues(field: string, limit = 12): Array<{ value: string; count: number }> {
+  const counts = getFacetValues(field);
+  return Array.from(counts.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+    .slice(0, limit);
+}
+
+const allFacetValues = FACET_FIELDS.reduce((acc, { key }) => {
+  acc[key] = getTopFacetValues(key);
+  return acc;
+}, {} as Record<string, Array<{ value: string; count: number }>>);
+
+const initialAssetsJson = JSON.stringify(assets.map((a) => ({
+  id: a.id,
+  Title: a.Title,
+  Description: a.Description,
+  Creator: a.Creator,
+  Contributor: a.Contributor,
+  Institution: a.Institution,
+  Country: a.Country,
+  Region: a.Region,
+  Subject: a.Subject,
+  Coverage: a.Coverage,
+  Language: a.Language,
+  Slug: a.Slug,
+  imageSrc: a.Image.src,
+  imageWidth: a.Image.width,
+  imageHeight: a.Image.height,
+  imageFormat: a.Image.format,
+})));
+---
+
+<div class="search-bar" data-search-root>
+  <div class="search-header">
+    <label for="asset-search" class="visually-hidden">Search assets</label>
+    <input
+      type="search"
+      id="asset-search"
+      placeholder="Search assets by title, description, creator..."
+      aria-label="Search assets"
+      class="search-input"
+      autocomplete="off"
+    />
+    <button
+      type="button"
+      id="clear-all"
+      class="clear-btn"
+      aria-label="Clear all filters"
+      hidden
+    >
+      Clear all
+    </button>
+  </div>
+
+  <div class="filters-panel" role="group" aria-label="Filter by">
+    <button
+      type="button"
+      class="filters-master-trigger"
+      id="filters-master"
+      aria-expanded="false"
+      aria-controls="filters-panel"
+      aria-haspopup="dialog"
+    >
+      <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+      </svg>
+      <span class="filters-label">Filters</span>
+      <span class="filters-count" aria-hidden="true">0</span>
+      <svg class="filters-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
+
+    <div class="filters-dropdown" id="filters-panel" role="dialog" aria-label="Filter options" hidden>
+      <div class="filters-header">
+        <h3>Filters</h3>
+        <button type="button" class="filters-close" aria-label="Close filters">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="selected-chips" aria-live="polite" aria-label="Active filters">
+        {FACET_FIELDS.map(({ key }) => (
+          <div class="facet-chips-row" data-facet={key} hidden>
+            <span class="facet-chip-label">{key}</span>
+            <div class="facet-chips"></div>
+          </div>
+        ))}
+      </div>
+
+      <div class="filters-divider"></div>
+
+      <div class="filters-accordion" role="region" aria-label="Filter categories">
+        {FACET_FIELDS.map(({ key, label }) => {
+          const values = allFacetValues[key];
+          if (values.length === 0) return null;
+          return (
+            <div class="filter-accordion-item" data-facet={key}>
+              <button
+                type="button"
+                class="filter-accordion-trigger"
+                aria-expanded="false"
+                aria-controls={`panel-${key}`}
+              >
+                <span class="accordion-label">{label}</span>
+                <span class="accordion-count" aria-hidden="true">{values.length}</span>
+                <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <div class="filter-accordion-panel" id={`panel-${key}`} role="region" aria-label={label} hidden>
+                <ul class="filter-options" role="listbox">
+                  <li class="filter-option" role="option" data-value="" aria-selected="false">
+                    <span class="option-label">All {label}</span>
+                  </li>
+                  {values.map(({ value, count }) => (
+                    <li class="filter-option" role="option" data-value={value} aria-selected="false">
+                      <span class="option-label">{value}</span>
+                      <span class="option-count" aria-hidden="true">({count})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="results-info"
+    aria-live="polite"
+    aria-atomic="true"
+  >
+    <span class="results-count">{assets.length} assets</span>
+  </div>
+
+  <section class="card-grid" role="list" aria-label="Asset results">
+    {assets.map((asset) => (
+      <article class="asset-card" role="listitem">
+        <a href={`/primary/${asset.Slug}`} class="asset-link">
+          <div class="card-image">
+            <Image
+              src={asset.Image}
+              alt={asset.Title || 'Asset image'}
+              loading="lazy"
+              class="asset-fullimage"
+            />
+          </div>
+          <header class="card-header">
+            <h3 class="card-title">{asset.Title}</h3>
+          </header>
+        </a>
+      </article>
+    ))}
+    {assets.length === 0 && (
+      <p class="no-results" role="status">No assets match the current filters.</p>
+    )}
+  </section>
+</div>
+
+<script is:inline define:vars={{ assetsJson: initialAssetsJson }}>
+  const root = document.querySelector('[data-search-root]');
+  const searchInput = root ? root.querySelector('#asset-search') : null;
+  const clearBtn = root ? root.querySelector('#clear-all') : null;
+  const cardGrid = root ? root.querySelector('.card-grid') : null;
+  const resultsCount = root ? root.querySelector('.results-count') : null;
+
+  const masterTrigger = root ? root.querySelector('#filters-master') : null;
+  const filtersDropdown = root ? root.querySelector('#filters-panel') : null;
+  const filtersClose = root ? root.querySelector('.filters-close') : null;
+  const accordionTriggers = root ? root.querySelectorAll('.filter-accordion-trigger') : null;
+  const filterOptions = root ? root.querySelectorAll('.filter-option') : null;
+
+  const assetsData = JSON.parse(assetsJson);
+  let query = '';
+  const selectedFacets = new Map();
+  let isMobile = window.innerWidth < 768;
+
+  function matchesAsset(asset) {
+    if (query) {
+      const q = query.toLowerCase();
+      const searchable = [
+        asset.Title,
+        asset.Description,
+        asset.Creator,
+        asset.Contributor,
+        asset.Institution,
+      ].join(' ').toLowerCase();
+      if (!searchable.includes(q)) return false;
+    }
+    for (const [facetKey, values] of selectedFacets) {
+      if (values.size === 0) continue;
+      const assetValue = asset[facetKey];
+      if (!assetValue || !values.has(assetValue.trim())) return false;
+    }
+    return true;
+  }
+
+  function renderResults() {
+    const filtered = assetsData.filter(matchesAsset);
+    if (cardGrid) {
+      cardGrid.innerHTML = filtered.length > 0
+        ? filtered.map(asset => `
+            <article class="asset-card" role="listitem">
+              <a href="/primary/${asset.Slug}" class="asset-link">
+                <div class="card-image">
+                  <img
+                    src="${asset.imageSrc}"
+                    alt="${asset.Title || 'Asset image'}"
+                    loading="lazy"
+                    width="${asset.imageWidth}"
+                    height="${asset.imageHeight}"
+                    class="asset-fullimage"
+                  />
+                </div>
+                <header class="card-header">
+                  <h3 class="card-title">${asset.Title}</h3>
+                </header>
+              </a>
+            </article>
+          `).join('')
+        : '<p class="no-results" role="status">No assets match the current filters.</p>';
+    }
+    if (resultsCount) {
+      resultsCount.textContent = `${filtered.length} asset${filtered.length !== 1 ? 's' : ''}`;
+    }
+    if (clearBtn) {
+      clearBtn.hidden = query === '' && [...selectedFacets.values()].every(s => s.size === 0);
+    }
+  }
+
+  function updateFilterUI() {
+    let totalSelected = 0;
+    
+    if (selectedFacets) {
+      selectedFacets.forEach((values, facetKey) => {
+        totalSelected += values.size;
+        
+        const chipsRow = root.querySelector(`.facet-chips-row[data-facet="${facetKey}"]`);
+        const chipsContainer = chipsRow ? chipsRow.querySelector('.facet-chips') : null;
+        
+        if (chipsRow && chipsContainer) {
+          if (values.size > 0) {
+            chipsRow.hidden = false;
+            chipsContainer.innerHTML = Array.from(values).map(value => `
+              <button type="button" class="selected-chip" data-facet="${facetKey}" data-value="${value}" aria-label="Remove ${value} filter">
+                ${value}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            `).join('');
+          } else {
+            chipsRow.hidden = true;
+            chipsContainer.innerHTML = '';
+          }
+        }
+        
+        const optionList = root.querySelector(`#panel-${facetKey}`);
+        if (optionList) {
+          optionList.querySelectorAll('.filter-option[data-value]').forEach(option => {
+            const val = option.dataset.value || '';
+            const isSelected = values.has(val);
+            option.setAttribute('aria-selected', isSelected);
+            option.classList.toggle('selected', isSelected);
+          });
+        }
+      });
+    }
+
+    const masterCount = masterTrigger ? masterTrigger.querySelector('.filters-count') : null;
+    if (masterCount) {
+      masterCount.textContent = totalSelected > 0 ? String(totalSelected) : '';
+      masterCount.style.display = totalSelected > 0 ? 'flex' : 'none';
+    }
+    
+    masterTrigger?.classList.toggle('has-active', totalSelected > 0);
+  }
+
+  function handleSearch(input) {
+    query = input.trim().toLowerCase();
+    renderResults();
+  }
+
+  function toggleFacet(facet, value) {
+    if (!value || value === '') return;
+    
+    if (!selectedFacets.has(facet)) selectedFacets.set(facet, new Set());
+    const set = selectedFacets.get(facet);
+    if (set) {
+      if (set.has(value)) set.delete(value);
+      else set.add(value);
+      if (set.size === 0) selectedFacets.delete(facet);
+    }
+    updateFilterUI();
+    renderResults();
+  }
+
+  function clearAll() {
+    query = '';
+    selectedFacets.clear();
+    if (searchInput) searchInput.value = '';
+    updateFilterUI();
+    renderResults();
+  }
+
+  function openFilters() {
+    if (!filtersDropdown || !masterTrigger) return;
+    filtersDropdown.hidden = false;
+    masterTrigger.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = isMobile ? 'hidden' : '';
+  }
+
+  function closeFilters() {
+    if (!filtersDropdown || !masterTrigger) return;
+    filtersDropdown.hidden = true;
+    masterTrigger.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+    accordionTriggers?.forEach(trigger => {
+      trigger.setAttribute('aria-expanded', 'false');
+      const panel = trigger.nextElementSibling;
+      if (panel) panel.hidden = true;
+    });
+  }
+
+  function toggleAccordion(trigger) {
+    const expanded = trigger.getAttribute('aria-expanded') === 'true';
+    const panel = trigger.nextElementSibling;
+    trigger.setAttribute('aria-expanded', !expanded);
+    if (panel) panel.hidden = expanded;
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      handleSearch(e.target.value);
+    });
+  }
+
+  if (masterTrigger) {
+    masterTrigger.addEventListener('click', () => {
+      const expanded = masterTrigger.getAttribute('aria-expanded') === 'true';
+      expanded ? closeFilters() : openFilters();
+    });
+  }
+
+  if (filtersClose) {
+    filtersClose.addEventListener('click', closeFilters);
+  }
+
+  if (accordionTriggers) {
+    accordionTriggers.forEach(trigger => {
+      trigger.addEventListener('click', () => toggleAccordion(trigger));
+    });
+  }
+
+  if (filterOptions) {
+    filterOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        const facet = option.closest('[data-facet]')?.dataset.facet || '';
+        const value = option.dataset.value || '';
+        toggleFacet(facet, value);
+        if (!isMobile) closeFilters();
+      });
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', clearAll);
+  }
+
+  document.addEventListener('click', (e) => {
+    if (filtersDropdown && !filtersDropdown.hidden) {
+      if (!filtersDropdown.contains(e.target) && !masterTrigger?.contains(e.target)) {
+        closeFilters();
+      }
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && filtersDropdown && !filtersDropdown.hidden) {
+      closeFilters();
+    }
+  });
+
+  const chipsContainer = root ? root.querySelector('.selected-chips') : null;
+  if (chipsContainer) {
+    chipsContainer.addEventListener('click', (e) => {
+      const chip = e.target.closest('.selected-chip');
+      if (chip) {
+        const facet = chip.dataset.facet || '';
+        const value = chip.dataset.value || '';
+        toggleFacet(facet, value);
+      }
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    isMobile = window.innerWidth < 768;
+  });
+</script>
+
+<style>
+  .search-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .search-header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    background: #fff;
+    color: #111827;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .clear-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .clear-btn:hover:not(:disabled) {
+    background: #e5e7eb;
+  }
+
+  .clear-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .filters-panel {
+    position: relative;
+  }
+
+  .filters-master-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #111827;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .filters-master-trigger:hover {
+    border-color: #3b82f6;
+    color: #1d4ed8;
+  }
+
+  .filters-master-trigger:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .filters-master-trigger.has-active {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .filter-icon {
+    color: #6b7280;
+    flex-shrink: 0;
+  }
+
+  .filters-master-trigger.has-active .filter-icon {
+    color: #3b82f6;
+  }
+
+  .filters-label {
+    font-weight: 600;
+  }
+
+  .filters-count {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: #fff;
+    background: #3b82f6;
+    border-radius: 9999px;
+  }
+
+  .filters-chevron {
+    color: #9ca3af;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .filters-master-trigger[aria-expanded="true"] .filters-chevron {
+    transform: rotate(180deg);
+  }
+
+  .filters-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 0.5rem;
+    min-width: 320px;
+    max-width: 480px;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    z-index: 100;
+    overflow: hidden;
+  }
+
+  @media (max-width: 767px) {
+    .filters-dropdown:not([hidden]) {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      margin: 0;
+      min-width: auto;
+      max-width: none;
+      border-radius: 0;
+      border: none;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+
+  .filters-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+  }
+
+  @media (max-width: 767px) {
+    .filters-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+  }
+
+  .filters-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .filters-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    color: #6b7280;
+    background: transparent;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .filters-close:hover {
+    color: #111827;
+    background: #e5e7eb;
+  }
+
+  .filters-close:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .selected-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding: 0.75rem 1rem;
+    min-height: 2.5rem;
+  }
+
+  @media (max-width: 767px) {
+    .selected-chips {
+      position: sticky;
+      top: 3.5rem;
+      background: #fff;
+      z-index: 5;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 1rem;
+    }
+  }
+
+  .facet-chips-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 9999px;
+  }
+
+  .facet-chip-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #1d4ed8;
+    margin-right: 0.25rem;
+  }
+
+  .facet-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .selected-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem 0.125rem 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #1d4ed8;
+    background: transparent;
+    border: none;
+    border-radius: 9999px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .selected-chip:hover {
+    color: #1e40af;
+  }
+
+  .selected-chip:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  }
+
+  .selected-chip svg {
+    flex-shrink: 0;
+  }
+
+  .filters-divider {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 0 1rem;
+  }
+
+  @media (max-width: 767px) {
+    .filters-divider {
+      margin: 0;
+    }
+  }
+
+  .filters-accordion {
+    padding: 0.5rem 1rem 1rem;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+
+  @media (max-width: 767px) {
+    .filters-accordion {
+      flex: 1;
+      max-height: none;
+      padding-bottom: 2rem;
+    }
+  }
+
+  .filter-accordion-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .filter-accordion-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #111827;
+    background: #f9fafb;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.15s ease;
+  }
+
+  .filter-accordion-trigger:hover {
+    background: #f3f4f6;
+  }
+
+  .filter-accordion-trigger:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 2px #3b82f6;
+  }
+
+  .filter-accordion-trigger[aria-expanded="true"] {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .accordion-label {
+    flex: 1;
+  }
+
+  .accordion-count {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #9ca3af;
+    margin-left: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .accordion-chevron {
+    color: #9ca3af;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .filter-accordion-trigger[aria-expanded="true"] .accordion-chevron {
+    transform: rotate(180deg);
+  }
+
+  .filter-accordion-panel {
+    padding: 0.75rem;
+    background: #fff;
+  }
+
+  .filter-options {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .filter-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: #374151;
+    cursor: pointer;
+    border-radius: 0.375rem;
+    transition: background-color 0.15s ease;
+  }
+
+  .filter-option:hover {
+    background: #f3f4f6;
+  }
+
+  .filter-option:focus {
+    outline: none;
+    background: #dbeafe;
+  }
+
+  .filter-option[aria-selected="true"] {
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-weight: 600;
+  }
+
+  .filter-option.selected {
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-weight: 600;
+  }
+
+  .option-label {
+    flex: 1;
+  }
+
+  .option-count {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #9ca3af;
+    margin-left: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .filter-option[aria-selected="true"] .option-count,
+  .filter-option.selected .option-count {
+    color: #1d4ed8;
+  }
+
+  .results-info {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0;
+    font-size: 0.875rem;
+    color: #6b7280;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 640px) {
+    .card-grid {
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .card-grid {
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+  }
+
+  .asset-card {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .asset-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .asset-link {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .card-image {
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: #f3f4f6;
+  }
+
+  .card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+
+  .card-image img:hover {
+    transform: scale(1.05);
+  }
+
+  .card-header {
+    padding: 1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-title {
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #111827;
+    text-align: center;
+  }
+
+  .no-results {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6b7280;
+    font-size: 1rem;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
